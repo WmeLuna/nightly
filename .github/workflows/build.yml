@@ -9,20 +9,16 @@ on:
     - cron: "0 */2 * * *"
 
 jobs:
-  NightlyBuilds:
+  GooseMod:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
-        with:
-          version: 7.5.0
       - uses: actions/setup-node@v2
         with:
           node-version: 15.x
       
-      - name: Clean Old Vers
-        run: rm -rf *.js
+      - name: Clean Old Ver
+        run: rm -rf goosemod.js
         
       - name: Build GooseMod
         run: |
@@ -32,7 +28,23 @@ jobs:
           mv dist/goosemod.js ../goosemod.js
           cd ..
           rm -rf GooseMod
-        
+
+      - name: Commit Changes
+        run: |
+          git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config --local user.name 'github-actions[bot]'
+          git add . || exit 0
+          git commit -m 'Update Goosemod' || exit 0
+          git push || exit 0
+          
+  Topaz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Clean Old Vers
+        run: rm -rf topaz.js
+
       - name: Build Topaz
         run: |
           git clone https://github.com/GooseMod/topaz && cd topaz
@@ -40,7 +52,26 @@ jobs:
           cd ..
           mv topaz/out.js topaz.js
           rm -rf topaz
-          
+
+      - name: Commit Changes
+        run: |
+          git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config --local user.name 'github-actions[bot]'
+          git add . || exit 0
+          git commit -m 'Update Topaz' || exit 0
+          git push || exit 0
+
+  Cumcord:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2.2.2
+        with:
+          version: 7.5.0
+
+      - name: Clean Old Vers
+        run: rm -rf cumcord.js
+
       - name: Build Cumcord
         run: |
           git clone https://git.sr.ht/~creatable/Cumcord && cd Cumcord
@@ -55,5 +86,5 @@ jobs:
           git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config --local user.name 'github-actions[bot]'
           git add . || exit 0
-          git commit -m 'Updates Nightly builds' || exit 0
+          git commit -m 'Update Cumcord' || exit 0
           git push || exit 0
