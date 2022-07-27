@@ -17,17 +17,25 @@ jobs:
       - uses: pnpm/action-setup@v2.2.2
         with:
           version: 7.5.0
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 15.x
       
       - name: Clean Old Vers
         run: rm -rf *.js
         
-      - name: Download Goose Mod
-        run: wget https://github.com/GooseMod/GooseMod/raw/dist-dev/goosemod.js -nv
+      - name: Build GooseMod
+        run: |
+          git clone https://github.com/GooseMod/GooseMod && cd GooseMod
+          npm ci
+          npm run build
+          mv dist/goosemod.js ../goosemod.js
+          cd ..
+          rm -rf GooseMod
         
       - name: Build Topaz
         run: |
-          git clone https://github.com/GooseMod/topaz
-          cd topaz
+          git clone https://github.com/GooseMod/topaz && cd topaz
           node bundle.js
           cd ..
           mv topaz/out.js topaz.js
@@ -35,8 +43,7 @@ jobs:
           
       - name: Build Cumcord
         run: |
-          git clone https://git.sr.ht/~creatable/Cumcord
-          cd Cumcord
+          git clone https://git.sr.ht/~creatable/Cumcord && cd Cumcord
           pnpm install
           node build.mjs
           mv dist/new-build.js ../cumcord.js
@@ -45,8 +52,8 @@ jobs:
           
       - name: Commit Changes
         run: |
-          git config --local user.email 'action@github.com'
-          git config --local user.name 'GitHub Action'
+          git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config --local user.name 'github-actions[bot]'
           git add . || exit 0
           git commit -m 'Updates Nightly builds' || exit 0
           
