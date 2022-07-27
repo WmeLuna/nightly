@@ -30,6 +30,14 @@ jobs:
           mv topaz/out.js topaz.js
           rm -rf topaz
           
+      - name: Build Cumcord
+        run: |
+          pnpm --version
+          exit 1
+          git clone https://git.sr.ht/~creatable/Cumcord
+          cd Cumcord
+          pnpm install
+          
       - name: Commit Changes
         run: |
           git config --local user.email 'action@github.com'
