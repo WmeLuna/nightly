@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: 15.x
       
-      - name: Clean Old Ver
+      - name: Clean Old Version
         run: rm -rf goosemod.js
         
       - name: Build GooseMod
@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Clean Old Vers
+      - name: Clean Old Version
         run: rm -rf topaz.js
 
       - name: Build Topaz
@@ -69,7 +69,7 @@ jobs:
         with:
           version: 7.5.0
 
-      - name: Clean Old Vers
+      - name: Clean Old Version
         run: rm -rf cumcord.js
 
       - name: Build Cumcord
@@ -81,6 +81,37 @@ jobs:
           cd ..
           rm -rf Cumcord
           
+      - name: Commit Changes
+        run: |
+          git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config --local user.name 'github-actions[bot]'
+          git add . || exit 0
+          git commit -m 'Update Cumcord' || exit 0
+          git push || exit 0
+
+  OpenAsar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+
+      - name: Clean Old Vers
+        run: rm -rf open.asar
+
+      - name: Build OpenAsar
+        run: |
+          git clone https://github.com/GooseMod/OpenAsar && cd OpenAsar
+          npm i -g asar
+          bash scripts/injectPolyfills.sh
+          sed -i -e "s/nightly/nightly-$(git rev-parse HEAD | cut -c 1-7)/" src/index.js
+          node scripts/strip.js
+          npx asar pack src app.asar
+          mv app.asar ../open.asar
+          cd ..
+          rm -rf OpenAsar
+
       - name: Commit Changes
         run: |
           git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
