@@ -33,8 +33,9 @@ jobs:
         run: |
           git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config --local user.name 'github-actions[bot]'
-          git add . || exit 0
-          git commit -m 'Update Goosemod' || exit 0
+          git pull || exit 0
+          git add ./goosemod.js || exit 0
+          git commit -m 'Update Goosemod' ./goosemod.js || exit 0
           git push || exit 0
           
   Topaz:
@@ -57,8 +58,9 @@ jobs:
         run: |
           git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config --local user.name 'github-actions[bot]'
-          git add . || exit 0
-          git commit -m 'Update Topaz' || exit 0
+          git pull || exit 0
+          git add ./topaz.js || exit 0
+          git commit -m 'Update Topaz' ./topaz.js || exit 0
           git push || exit 0
 
   Cumcord:
@@ -85,8 +87,9 @@ jobs:
         run: |
           git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config --local user.name 'github-actions[bot]'
-          git add . || exit 0
-          git commit -m 'Update Cumcord' || exit 0
+          git pull || exit 0
+          git add ./cumcord.js || exit 0
+          git commit -m 'Update Cumcord' ./cumcord.js || exit 0
           git push || exit 0
 
   OpenAsar:
@@ -116,6 +119,7 @@ jobs:
         run: |
           git config --local user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config --local user.name 'github-actions[bot]'
-          git add . || exit 0
-          git commit -m 'Update OpenAsar' || exit 0
+          git pull || exit 0
+          git add ./open.asar || exit 0
+          git commit -m 'Update OpenAsar' ./open.asar || exit 0
           git push || exit 0
