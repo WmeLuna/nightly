@@ -1,4 +1,4 @@
-name: Homebrew Updater
+name: Nightly Builds
 
 on:
   workflow_dispatch:
@@ -9,11 +9,14 @@ on:
     - cron: "0 */2 * * *"
 
 jobs:
-  homebrewUpdater:
+  NightlyBuilds:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
+      
+      - name: Clean Old Vers
+        run: rm -rf *.js
         
       - name: Download Goose Mod
         run: wget https://github.com/GooseMod/GooseMod/raw/dist-dev/goosemod.js -nv
