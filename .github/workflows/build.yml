@@ -26,6 +26,7 @@ jobs:
           npm ci
           npm run build
           mv dist/goosemod.js ../goosemod.js
+          git rev-parse HEAD | cut -c 1-7 > /tmp/gm
           cd ..
           rm -rf GooseMod
 
@@ -35,7 +36,7 @@ jobs:
           git config --local user.name 'github-actions[bot]'
           git pull || exit 0
           git add ./goosemod.js || exit 0
-          git commit -m 'Update Goosemod' ./goosemod.js || exit 0
+          git commit -m "Update Goosemod | $(cat /tmp/gm)" ./goosemod.js || exit 0
           git push || exit 0
           
   Topaz:
@@ -50,8 +51,9 @@ jobs:
         run: |
           git clone https://github.com/GooseMod/topaz && cd topaz
           node bundle.js
+          mv out.js ../topaz.js
+          git rev-parse HEAD | cut -c 1-7 > /tmp/tz
           cd ..
-          mv topaz/out.js topaz.js
           rm -rf topaz
 
       - name: Commit Changes
@@ -60,7 +62,7 @@ jobs:
           git config --local user.name 'github-actions[bot]'
           git pull || exit 0
           git add ./topaz.js || exit 0
-          git commit -m 'Update Topaz' ./topaz.js || exit 0
+          git commit -m "Update Topaz | $(cat /tmp/tz)" ./topaz.js || exit 0
           git push || exit 0
 
   Cumcord:
@@ -80,6 +82,7 @@ jobs:
           pnpm install
           node build.mjs
           mv dist/new-build.js ../cumcord.js
+          git rev-parse HEAD | cut -c 1-7 > /tmp/cc
           cd ..
           rm -rf Cumcord
           
@@ -89,7 +92,7 @@ jobs:
           git config --local user.name 'github-actions[bot]'
           git pull || exit 0
           git add ./cumcord.js || exit 0
-          git commit -m 'Update Cumcord' ./cumcord.js || exit 0
+          git commit -m "Update Cumcord | $(cat /tmp/cc)" ./cumcord.js || exit 0
           git push || exit 0
 
   OpenAsar:
@@ -112,6 +115,7 @@ jobs:
           node scripts/strip.js
           npx asar pack src app.asar
           mv app.asar ../open.asar
+          git rev-parse HEAD | cut -c 1-7 > /tmp/oa
           cd ..
           rm -rf OpenAsar
 
@@ -121,5 +125,5 @@ jobs:
           git config --local user.name 'github-actions[bot]'
           git pull || exit 0
           git add ./open.asar || exit 0
-          git commit -m 'Update OpenAsar' ./open.asar || exit 0
+          git commit -m "Update OpenAsar | $(cat /tmp/oa)" ./open.asar || exit 0
           git push || exit 0
