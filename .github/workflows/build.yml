@@ -14,6 +14,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2.2.2
       
       - name: Clean Old Vers
         run: rm -rf *.js
@@ -43,7 +44,7 @@ jobs:
           git config --local user.email 'action@github.com'
           git config --local user.name 'GitHub Action'
           git add . || exit 0
-          git commit -m 'Updates Nightly builds' || exit 0
+          git commit -m 'Updates Nightly builds' --force || exit 0
           
       - name: Push changes
         uses: ad-m/github-push-action@master
