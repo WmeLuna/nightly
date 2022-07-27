@@ -35,11 +35,13 @@ jobs:
           
       - name: Build Cumcord
         run: |
-          pnpm --version
-          exit 1
           git clone https://git.sr.ht/~creatable/Cumcord
           cd Cumcord
           pnpm install
+          node build.mjs
+          mv dist/new-build.js ../cumcord.js
+          cd ..
+          rm -rf Cumcord
           
       - name: Commit Changes
         run: |
