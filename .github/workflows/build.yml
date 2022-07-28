@@ -148,7 +148,7 @@ jobs:
           git clone https://github.com/kernel-mod/electron && cd electron
           pnpm i
           pnpm run build
-          mv dist/kernel.asar ../kernel.asar
+          mv dist/kernel.asar ../../kernel.asar
           git rev-parse HEAD | cut -c 1-7 > /tmp/km
           cd ..
           rm -rf browser && rm -rf electron
