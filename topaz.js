@@ -792,7 +792,11 @@ manager.add();
 
 manager`);
 
-const Onyx = eval(`const unsentrify = (obj) => Object.keys(obj).reduce((acc, x) => { acc[x] = obj[x].__sentry_original__ ?? obj[x]; return acc; }, {});
+const Onyx = eval(`const unsentrify = (obj) => Object.keys(obj).reduce((acc, x) => {
+  const sub = obj[x].__REACT_DEVTOOLS_ORIGINAL_METHOD__ ?? obj[x];
+  acc[x] = sub.__sentry_original__ ?? sub;
+  return acc;
+}, {});
 const makeSourceURL = (name) => \`\${name} | Topaz\`.replace(/ /g, '%20');
 const prettifyString = (str) => str.replaceAll('_', ' ').split(' ').map(x => x[0].toUpperCase() + x.slice(1)).join(' ');
 
@@ -1075,7 +1079,7 @@ const Onyx = function (entityID, manifest, transformRoot) {
 
   context.goosemodScope = context.goosemod; // goosemod alias
 
-  context.console = unsentrify(window.console); // unsentrify console funcs
+  context.console = window.console.context ? window.console.context('topaz_plugin') : unsentrify(window.console); // use console.context or fallback on unsentrify
 
   context.window = context; // recursive global
 
