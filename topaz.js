@@ -1012,35 +1012,62 @@ const permissionsModal = async (manifest, neededPerms) => {
   return finalPerms;
 };
 
+const iframeGlobals = [ 'performance', 'setTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'fetch', 'addEventListener', 'removeEventListener' ];
+const passGlobals = [ 'topaz', 'goosemod', 'document', '_', 'addEventListener', 'removeEventListener', 'Node', 'Element', 'MutationEvent', 'MutationRecord' ];
+
+// did you know: using innerHTML is ~2.5x faster than appendChild for some reason (~40ms -> ~15ms), so we setup a parent just for making our iframes via this trick
+const containerParent = document.createElement('div');
+document.body.appendChild(containerParent);
+
+const createContainer = (inst) => {
+  containerParent.innerHTML = '<iframe></iframe>'; // make iframe
+  const el = containerParent.children[0];
+
+  const _constructor = el.contentWindow.Function.constructor;
+  el.contentWindow.Function.constructor = function() {
+    return (_constructor.apply(inst.context, arguments)).bind(inst.context);
+  };
+
+
+  const ev = el.contentWindow.eval;
+
+  for (const k of Object.keys(el.contentWindow)) {
+    if (!iframeGlobals.includes(k)) {
+      el.contentWindow[k] = undefined;
+      delete el.contentWindow[k];
+    }
+  }
+
+  el.remove();
+
+  return ev;
+};
+
 
 // we have to use function instead of class because classes force strict mode which disables with
 const Onyx = function (entityID, manifest, transformRoot) {
   const startTime = performance.now();
   const context = {};
 
-  // todo: filter elements for personal info?
-  const allowGlobals = [ 'topaz', 'DiscordNative', 'navigator', 'document', 'setTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', '_', 'performance', 'fetch', 'clearTimeout', 'setImmediate', 'location' ];
-
   // nullify (delete) all keys in window to start except allowlist
-  for (const k of Object.keys(window)) { // for (const k of Reflect.ownKeys(window)) {
-    if (allowGlobals.includes(k)) {
-      const orig = window[k];
-      context[k] = typeof orig === 'function' && k !== '_' ? orig.bind(window) : orig; // bind to fix illegal invocation (also lodash breaks bind)
-
-      continue;
-    }
-
-    context[k] = null;
-  }
-
-  const forceGlobals = [ 'addEventListener', 'removeEventListener' ]; // not in keys but force in context
-
-  for (const k of forceGlobals) {
-    const orig = window[k];
+  for (const k of passGlobals) {
+    let orig = window[k];
     context[k] = typeof orig === 'function' && k !== '_' ? orig.bind(window) : orig; // bind to fix illegal invocation (also lodash breaks bind)
   }
 
-  if (!context.DiscordNative) context.DiscordNative = { // basic polyfill
+  context.MutationObserver = function(callback) { // janky wrapper because Chromium breaks with disconnected iframe
+    const obs = new window.MutationObserver((mutations) => {
+      callback(mutations);
+    });
+
+    this.observe = obs.observe.bind(obs);
+    this.disconnect = obs.disconnect.bind(obs);
+    this.takeRecords = obs.takeRecords.bind(obs);
+
+    return this;
+  };
+
+  context.DiscordNative = { // basic polyfill
     crashReporter: {
       getMetadata: () => ({
         user_id: this.safeWebpack(goosemod.webpackModules.findByProps('getCurrentUser')).getCurrentUser().id
@@ -1081,7 +1108,12 @@ const Onyx = function (entityID, manifest, transformRoot) {
 
   context.console = window.console.context ? window.console.context('topaz_plugin') : unsentrify(window.console); // use console.context or fallback on unsentrify
 
+  context.location = { // mock location
+    href: window.location.href
+  };
+
   context.window = context; // recursive global
+  context.globalThis = context;
 
   // mock node
   context.global = context;
@@ -1103,25 +1135,30 @@ const Onyx = function (entityID, manifest, transformRoot) {
   // custom globals
   context.__entityID = entityID;
 
-
   this.entityID = entityID;
   this.manifest = manifest;
-  this.context = Object.assign(context);
+  this.context = Object.seal(Object.freeze(Object.assign({}, context)));
+
+  const containedEval = createContainer(this);
 
   let predictedPerms = [];
   this.eval = function (_code) {
-    let code = _code + \`\\n\\n;module.exports\\n //# sourceURL=\${makeSourceURL(this.manifest.name)}\\n\`;
-    code += this.MapGen(code, transformRoot, this.manifest.name);
-
     // basic static code analysis for predicting needed permissions
     // const objectPredictBlacklist = [ 'clyde' ];
     // predictedPerms = Object.keys(permissions).filter(x => permissions[x].some(y => [...code.matchAll(new RegExp(\`([^. 	]*?)\\\\.\${y}\`, 'g'))].some(z => z && !objectPredictBlacklist.includes(z[1].toLowerCase()))));
     // topaz.log('onyx', 'predicted perms for', this.manifest.name, predictedPerms);
 
-    let exported;
-    with (this.context) {
-      exported = eval(code);
-    }
+    const argumentContext = Object.keys(this.context).filter(x => !x.match(/^[0-9]/) && !x.match(/[-,]/));
+
+    let code = \`(function (\${argumentContext}) {
+\${_code}\\n\\n
+;return module.exports;
+});
+//# sourceURL=\${makeSourceURL(this.manifest.name)}\`;
+
+    code += '\\n' + this.MapGen(code, transformRoot, this.manifest.name);
+
+    let exported = containedEval.bind(this.context)(code).apply(this.context, argumentContext.map(x => this.context[x]));
 
     return exported;
   };
@@ -1179,7 +1216,8 @@ const Onyx = function (entityID, manifest, transformRoot) {
       keys = Reflect.ownKeys(mod).concat(Reflect.ownKeys(mod.__proto__ ?? {}));
     } catch { }
 
-    // if (keys.includes('Blob')) throw new Error('Onyx blocked access to window in Webpack', mod); // block window
+    if (keys.includes('Object')) return this.context; // Block window
+    if (keys.includes('clear') && keys.includes('get') && keys.includes('set') && keys.includes('remove') && !keys.includes('mergeDeep')) return {}; // Block localStorage
 
     const hasFlags = keys.some(x => typeof x === 'string' && Object.values(permissions).flat().some(y => x === y.split('@')[0])); // has any keys in it
     return hasFlags ? new Proxy(mod, { // make proxy only if potential
@@ -3236,6 +3274,7 @@ BdApi = {
   findModuleByProps: Webpack.findByProps,
   findModuleByDisplayName: Webpack.findByDisplayName,
 
+  getInternalInstance: goosemod.reactUtils.getReactInstance,
 
   injectCSS: (id, css) => {
     const el = document.createElement('style');
@@ -3340,7 +3379,7 @@ BdApi = {
   get 'betterdiscord/libs/zeres'() { // patch official
     return new Promise(async res => {
       const out = (await (await fetch('https://raw.githubusercontent.com/rauenzi/BDPluginLibrary/master/release/0PluginLibrary.plugin.js')).text())
-        .replace('static async processUpdateCheck(pluginName, updateLink) {', 'static async processUpdateCheck(pluginName, updateLink) { return Promise.resolve(this.removeUpdateNotice(pluginName));') // disable update checks
+        .replace('static async hasUpdate(updateLink) {', 'static async hasUpdate(updateLink) { return Promise.resolve(false);') // disable updating
         .replace('this.listeners = new Set();', 'this.listeners = {};') // webpack patches to use our API
         .replace('static addListener(listener) {', 'static addListener(listener) { const id = Math.random().toString().slice(2); const int = setInterval(() => { for (const m of goosemod.webpackModules.all()) { if (m) listener(m); } }, 5000); listener._listenerId = id; return listeners[id] = () => clearInterval(int);')
         .replace('static removeListener(listener) {', 'static removeListener(listener) { listeners[listener._listenerId]?.(); delete listeners[listener._listenerId]; return;')
@@ -4967,11 +5006,12 @@ const install = async (info, settings = undefined, disabled = false) => {
 
     tree = [];
     if (isGitHub) {
-      tree = (await (await fetch(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=true`)).json()).tree;
+      const treeUrl = `https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=true`;
+      tree = JSON.parse(fetchCache.get(treeUrl) ?? fetchCache.set(treeUrl, (await (await fetch(treeUrl)).text()))).tree;
 
       if (subdir) tree = tree.filter(x => x.path.startsWith(subdir + '/')).map(x => { x.path = x.path.replace(subdir + '/', ''); return x; });
 
-      console.log('tree', tree);
+      log('bundler', 'tree', tree);
     }
 
     updatePending(info, 'Fetching index...');
@@ -5552,8 +5592,8 @@ const transform = async (path, code, mod) => {
   let indexCode = await includeRequires(path, code);
 
   let out = await mapifyBuiltin(fullMod(mod) + '/global') +
-  ((code.includes('ZeresPluginLibrary') || code.includes('ZLibrary')) ? await mapifyBuiltin('betterdiscord/libs/zeres') : '') +
   Object.values(chunks).join('\n\n') + '\n\n' +
+  ((code.includes('ZeresPluginLibrary') || code.includes('ZLibrary')) ? await mapifyBuiltin('betterdiscord/libs/zeres') : '') +
     `// MAP_START|${'.' + path.replace(transformRoot, '')}
 ${replaceLast(indexCode, 'export default', 'module.exports =').replaceAll(/export const (.*?)=/g, (_, key) => `module.exports.${key}=`)}
 // MAP_END`;
@@ -5602,6 +5642,23 @@ const setDisabled = (key, disabled) => {
 };
 
 const purgeCacheForPlugin = (info) => {
+  let [ repo, branch ] = info.split('@');
+  if (!branch) branch = 'HEAD'; // default to HEAD
+
+  let isGitHub = !info.startsWith('http');
+
+  let subdir;
+  if (isGitHub) { // todo: check
+    const spl = info.split('/');
+    if (spl.length > 2) { // Not just repo
+      repo = spl.slice(0, 2).join('/');
+      subdir = spl.slice(4).join('/');
+      branch = spl[3] ?? 'HEAD';
+    }
+  }
+
+  if (isGitHub && repo) fetchCache.remove(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=true`); // remove gh api cache
+
   finalCache.remove(info); // remove final cache
   fetchCache.keys().filter(x => x.includes(info.replace('/blob', '').replace('/tree', '').replace('github.com', 'raw.githubusercontent.com'))).forEach(y => fetchCache.remove(y)); // remove fetch caches
 };
