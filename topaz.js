@@ -1012,15 +1012,15 @@ const permissionsModal = async (manifest, neededPerms) => {
   return finalPerms;
 };
 
-const iframeGlobals = [ 'performance', 'setTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'fetch', 'addEventListener', 'removeEventListener' ];
-const passGlobals = [ 'topaz', 'goosemod', 'document', '_', 'addEventListener', 'removeEventListener', 'Node', 'Element', 'MutationEvent', 'MutationRecord' ];
+const iframeGlobals = [ 'performance', ];
+const passGlobals = [ 'topaz', 'goosemod', 'fetch', 'document', '_', 'TextEncoder', 'TextDecoder', 'addEventListener', 'removeEventListener', 'setTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'Node', 'Element', 'MutationEvent', 'MutationRecord', 'addEventListener', 'removeEventListener', 'URL' ];
 
 // did you know: using innerHTML is ~2.5x faster than appendChild for some reason (~40ms -> ~15ms), so we setup a parent just for making our iframes via this trick
 const containerParent = document.createElement('div');
 document.body.appendChild(containerParent);
 
 const createContainer = (inst) => {
-  containerParent.innerHTML = '<iframe></iframe>'; // make iframe
+  containerParent.innerHTML = window.BdApi ? \`<object data="about:blank"></object>\` : '<iframe></iframe>'; // make iframe. use object (bit slower) if BD is also installed as it breaks sandboxing
   const el = containerParent.children[0];
 
   const _constructor = el.contentWindow.Function.constructor;
@@ -3199,7 +3199,6 @@ powercord = {
   'goosemod/global': '',
 
   'betterdiscord/global': `let BdApi;
-
 (() => {
 const cssEls = {};
 const unpatches = {};
@@ -3269,7 +3268,7 @@ const showConfirmationModal = async (title, content, { onConfirm, onCancel, conf
     else onCancel?.();
 };
 
-BdApi = {
+BdApi = window.BdApi = {
   findModule: Webpack.find,
   findAllModules: Webpack.findAll,
   findModuleByProps: Webpack.findByProps,
@@ -3379,14 +3378,15 @@ BdApi = {
 
   get 'betterdiscord/libs/zeres'() { // patch official
     return new Promise(async res => {
-      const out = await fetchCache.fetch('https://raw.githubusercontent.com/rauenzi/BDPluginLibrary/master/release/0PluginLibrary.plugin.js')
+      const out = (await fetchCache.fetch('https://raw.githubusercontent.com/rauenzi/BDPluginLibrary/master/release/0PluginLibrary.plugin.js'))
         .replace('static async hasUpdate(updateLink) {', 'static async hasUpdate(updateLink) { return Promise.resolve(false);') // disable updating
         .replace('this.listeners = new Set();', 'this.listeners = {};') // webpack patches to use our API
-        .replace('static addListener(listener) {', 'static addListener(listener) { const id = Math.random().toString().slice(2); const int = setInterval(() => { for (const m of goosemod.webpackModules.all()) { if (m) listener(m); } }, 5000); listener._listenerId = id; return listeners[id] = () => clearInterval(int);')
-        .replace('static removeListener(listener) {', 'static removeListener(listener) { listeners[listener._listenerId]?.(); delete listeners[listener._listenerId]; return;')
+        .replace('static addListener(listener) {', 'static addListener(listener) { console.log(listener); const id = Math.random().toString().slice(2); const int = setInterval(() => { for (const m of goosemod.webpackModules.all()) { if (m) listener(m); } }, 5000); listener._listenerId = id; return this.listeners[id] = () => { clearInterval(int); delete this.listeners[listener._listenerId]; }')
+        .replace('static removeListener(listener) {', 'static removeListener(listener) { this.listeners[listener._listenerId]?.(); return;')
         .replace('static getModule(filter, first = true) {', `static getModule(filter, first = true) { return goosemod.webpackModules[first ? 'find' : 'findAll'](filter);`)
         .replace('static getByIndex(index) {', 'static getByIndex(index) { return goosemod.webpackModules.findByModuleId(index);')
         .replace('static getAllModules() { return goosemod.webpackModules.all().reduce((acc, x, i) => { acc[i] = x; return acc; }, {});')
+        .replace('static pushChildPatch(caller, moduleToPatch, functionName, callback, options = {}) {', `static pushChildPatch(caller, moduleToPatch, functionName, callback, options = {}) { return BdApi.Patcher[options.type ?? 'after'](caller, this.resolveModule(moduleToPatch), functionName, callback);`) // use our patcher
         .replace('module.exports.ZeresPluginLibrary = __webpack_exports__["default"];', '(new __webpack_exports__["default"]).load();') // load library on creation, disable export
         .replace('this.__ORIGINAL_PUSH__ = window[this.chunkName].push;', 'return;') // disable webpack push patching
         .replace('showChangelog(footer) {', 'showChangelog(footer) { return;') // disable changelogs
@@ -4677,7 +4677,147 @@ const inspect = msg => {
 module.exports = {
   inspect
 };`,
-  'request': `module.exports = {};`,
+  'request': `const https = require('https');
+
+// Generic polyfill for "request" npm package, wrapper for https
+const nodeReq = ({ method, url, headers, qs, timeout, body }) => new Promise((resolve) => {
+  let req;
+  try {
+    req = https.request(url + (qs != null ? \`?\${(new URLSearchParams(qs)).toString()}\` : ''), { method, headers, timeout }, async (res) => {
+      resolve(res);
+    });
+  } catch (e) {
+    return resolve(e);
+  }
+
+  req.on('error', resolve);
+
+  if (body) req.write(body); // Write POST body if included
+
+  req.end();
+});
+
+const request = (...args) => {
+  topaz.log('node.request', ...args);
+  let options, callback;
+  switch (args.length) {
+    case 3: // request(url, options, callback)
+      options = {
+        url: args[0],
+        ...args[1]
+      };
+
+      callback = args[2];
+      break;
+
+    default: // request(url, callback) / request(options, callback)
+      options = args[0];
+      callback = args[1];
+  }
+
+  if (typeof options === 'string') {
+    options = {
+      url: options
+    };
+  }
+
+  const listeners = {};
+
+  nodeReq(options).then(async (res) => {
+    if (!res.statusCode) {
+      listeners['error']?.(res);
+      return callback?.(res, null, null);
+    }
+
+    listeners['response']?.(res);
+
+    let data = [];
+    res.on('data', (chunk) => {
+      data.push(chunk);
+      listeners['data']?.(chunk);
+    });
+
+    await new Promise((resolve) => res.on('end', resolve)); // Wait to read full body
+
+    // const buf = Buffer.concat(data);
+    const buf = new Uint8Array(...data).buffer;
+    buf.toString = function() { return new TextDecoder().decode(this); };
+
+    callback?.(undefined, res, options.encoding !== null ? buf.toString() : buf);
+  });
+
+  const ret = {
+    on: (type, handler) => {
+      listeners[type] = handler;
+      return ret; // Return self
+    }
+  };
+
+  return ret;
+};
+
+for (const m of [ 'get', 'post', 'put', 'patch', 'delete', 'head', 'options' ]) {
+  request[m] = (url, callback) => request({ url, method: m }, callback);
+}
+request.del = request.delete; // Special case
+
+module.exports = request;`,
+  'https': `const request = (...args) => {
+  topaz.log('node.https', ...args);
+
+  let opts, cb;
+  if (args.length === 2) {
+    opts = args[0];
+    cb = args[1];
+  }
+
+  if (args.length === 3) {
+    const url = new URL(args[0]);
+
+    opts = {
+      hostname: url.hostname,
+      path: url.pathname,
+      port: url.protocol === 'https:' ? 443 : 80,
+      ...args[1]
+    };
+
+    cb = args[2];
+  }
+
+  const { method, headers, timeout, hostname, path, port } = opts;
+
+  const url = \`\${port === 443 ? 'https' : 'http'}://\${hostname}\${path}\`;
+
+  const listeners = {};
+
+  return {
+    write: (body) => {},
+    end: async () => {
+      const req = await fetch(url, {
+        method,
+        headers
+      });
+
+      cb({
+        statusCode: req.status,
+        headers: req.headers,
+
+        on: (ev, handler) => listeners[ev] = handler
+      });
+
+      const data = await req.arrayBuffer();
+
+      listeners.data(data);
+
+      listeners.end();
+    },
+    on: (ev, handler) => listeners[ev] = handler
+  };
+};
+
+module.exports = {
+  request
+};`,
   'querystring': `module.exports = {
   stringify: x => new URLSearchParams(x).toString()
 };`,
@@ -4831,7 +4971,7 @@ const __dirname = '${getDir(finalPath)}';
 ` + code
       .replace('module.exports =', `${id} =`)
       .replace('export default', `${id} =`)
-      .replaceAll(/(module\.)?exports\.(.*?)=/g, (_, _mod, key) => `${id}${key}=`)
+      .replaceAll(/(module\.)?exports\.(.*?)=/g, (_, _mod, key) => `${id}.${key}=`)
       .replaceAll(/export const (.*?)=/g, (_, key) => `const ${key}= ${id}.${key}=`)
       .replaceAll(/export function (.*?)\(/g, (_, key) => `const ${key} = ${id}.${key} = function ${key}(`)
       .replaceAll(/export class ([^ ]*)/g, (_, key) => `const ${key} = ${id}.${key} = class ${key}`) +
@@ -6762,7 +6902,7 @@ class Settings extends React.PureComponent {
       const infoFromRecom = (x) => x.endsWith('.plugin.js') ? x.replace('github.com', 'raw.githubusercontent.com').replace('blob/', '') : x.replace('https://github.com/', '');
       const matching = Object.keys(recom).filter((x) => !plugins[infoFromRecom(recom[x])] && fuzzySearch.test(x) && autocompleteFiltering.mods[x.split('%')[0].toLowerCase()] !== false);
 
-      if (!init && matching.length > 0) {
+      if (!init) {
         ReactDOM.render(React.createElement(React.Fragment, {},
           React.createElement('h5', {},
             'Popular ' + (selectedTab === 'PLUGINS' ? 'Plugins' : 'Themes'),
