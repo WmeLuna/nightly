@@ -1120,7 +1120,6 @@ const Onyx = function (entityID, manifest, transformRoot) {
   context.module = {
     exports: {}
   };
-  context.__dirname = '/home/topaz/plugin';
   context.process = {
     versions: {
       electron: '13.6.6'
@@ -1741,7 +1740,8 @@ return function Editor(props) {
           const channels = [
             '755005803303403570',
             '836694789898109009',
-            '449569809613717518'
+            '449569809613717518',
+            '1000955971650195588',
           ];
 
           const getSnippets = async (channelId) => {
@@ -3110,7 +3110,8 @@ powercord = {
     },
 
     notices: {
-      sendToast: (_id, { header, content, type, buttons }) => goosemod.showToast(content) // todo: improve to use all given
+      sendToast: (_id, { header, content, type, buttons }) => goosemod.showToast(content), // todo: improve to use all given
+      sendAnnouncement: (_id, { color, message, button: { text: buttonText, onClick } }) => goosemod.patcher.notices.patch(message, buttonText, onClick, color ?? 'brand'),
     },
 
     i18n: {
@@ -4608,7 +4609,24 @@ module.exports = {
   resolve: (...parts) => resolve(parts.join('/')) // todo: implement resolve properly (root / overwrite)
 };`,
   'fs': `module.exports = {
-  readdirSync: path => []
+  readdirSync: path => [],
+
+  readFileSync: (path, encoding) => {
+    const isRepo = __entityID.split('/').length === 2;
+
+    if (isRepo) {
+      const url = \`https://raw.githubusercontent.com/\${__entityID}/HEAD/\${path}\`;
+      console.log('fs read', url);
+
+      /* const request = new XMLHttpRequest();
+      request.open('GET', url, false);
+      request.send(null);
+
+      if (request.status === 200) {
+        console.log(request.responseText);
+      } */
+    }
+  }
 };`,
   'process': `module.exports = {
   platform: 'linux',
@@ -4662,6 +4680,12 @@ module.exports = {
   'request': `module.exports = {};`,
   'querystring': `module.exports = {
   stringify: x => new URLSearchParams(x).toString()
+};`,
+  'os': `module.exports = {
+  platform: () => 'linux'
+};`,
+  'url': `module.exports = {
+  URL
 };`,
 };
 
@@ -4797,7 +4821,9 @@ const makeChunk = async (root, p) => {
 
   const chunk = `// ${finalPath}
 let ${id} = {};
-(() => { // MAP_START|${finalPath}
+(() => {
+const __dirname = '${getDir(finalPath)}';
+// MAP_START|${finalPath}
 ` + code
       .replace('module.exports =', `${id} =`)
       .replace('export default', `${id} =`)
