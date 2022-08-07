@@ -76,13 +76,6 @@ const store = await new Promise(res => {
 
     const store = {};
 
-    topaz.log('storage', 'trying to port local storage -> idb');
-    for (const key of Object.keys(localStorage).filter(x => x.startsWith('topaz_'))) {
-      console.log(key);
-      store[key.slice('topaz_'.length)] = localStorage.getItem(key);
-      localStorage.removeItem(key);
-    }
-
     objectStore.add(store, 'store');
 
     topaz.log('storage', 'inited db', store);
@@ -817,8 +810,8 @@ const permissions = {
   // friends_check_blocked: [ 'isBlocked' ],
   status_readstatus: [ 'getStatus', 'isMobileOnline' ],
   status_readactivities: [ 'findActivity', 'getActivities', 'getActivityMetadata', 'getAllApplicationActivities', 'getApplicationActivity', 'getPrimaryActivity' ],
-  clipboard_write: [],
-  clipboard_read: [ 'copy', 'writeText' ]
+  clipboard_read: [],
+  clipboard_write: [ 'copy', 'writeText' ]
 };
 
 const complexMap = Object.keys(permissions).reduce((acc, x) => acc.concat(permissions[x].filter(y => y.includes('@')).map(y => [ x, ...y.split('@') ])), []);
@@ -1013,7 +1006,7 @@ const permissionsModal = async (manifest, neededPerms) => {
 };
 
 const iframeGlobals = [ 'performance', ];
-const passGlobals = [ 'topaz', 'goosemod', 'fetch', 'document', '_', 'TextEncoder', 'TextDecoder', 'addEventListener', 'removeEventListener', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'Node', 'Element', 'MutationEvent', 'MutationRecord', 'addEventListener', 'removeEventListener', 'URL', 'setImmediate', 'NodeList', 'getComputedStyle' ];
+const passGlobals = [ 'topaz', 'goosemod', 'fetch', 'document', '_', 'TextEncoder', 'TextDecoder', 'addEventListener', 'removeEventListener', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'Node', 'Element', 'MutationEvent', 'MutationRecord', 'addEventListener', 'removeEventListener', 'URL', 'setImmediate', 'NodeList', 'getComputedStyle', 'XMLHttpRequest', 'ArrayBuffer', 'Response', 'IntersectionObserver', 'WebAssembly' ];
 
 // did you know: using innerHTML is ~2.5x faster than appendChild for some reason (~40ms -> ~15ms), so we setup a parent just for making our iframes via this trick
 const containerParent = document.createElement('div');
@@ -4607,16 +4600,21 @@ demon = {
   'path': `const resolve = (x) => {
   let ind;
   if (x.startsWith('./')) x = x.substring(2);
-  x = x.replaceAll('./', '/').replaceAll('//', '/'); // example/./test -> example/test
+  x = x.replaceAll('/./', '/').replaceAll('//', '/'); // example/./test -> example/test
 
-  while (ind = x.indexOf('../') !== -1) x = x.slice(0, ind) + x.slice(ind + 3); // example/test/../sub -> example/sub
+  while ((ind = x.indexOf('../')) !== -1) {
+      const priorSlash = x.lastIndexOf('/', ind - 4);
+      x = x.slice(0, priorSlash === -1 ? 0 : (priorSlash + 1)) + x.slice(ind + 3); // example/test/../sub -> example/sub
+  }
 
   return x;
 };
 
 module.exports = {
   join: (...parts) => resolve(parts.join('/')),
-  resolve: (...parts) => resolve(parts.join('/')) // todo: implement resolve properly (root / overwrite)
+  resolve: (...parts) => resolve(parts.join('/')), // todo: implement resolve properly (root / overwrite)
+
+  isAbsolute: p => p.startsWith('/') || !!p.match(/^[A-Z]:\\\\/)
 };`,
   'fs': `module.exports = {
   readdirSync: path => [],
@@ -5126,10 +5124,23 @@ const resolveFileFromTree = async (path) => {
 
         console.log('PACKAGE', package.main);
 
-        res = tree.find((x) => x.type === 'blob' && x.path.toLowerCase().startsWith(path.toLowerCase().replace('./', '') + '/' + package.main))?.path;
+        res = tree.find((x) => x.type === 'blob' && x.path.toLowerCase().startsWith(path.toLowerCase().replace('./', '') + '/' + package.main.toLowerCase()))?.path;
       }
     }
   } else res = tree.find((x) => x.type === 'blob' && x.path.toLowerCase().startsWith(path.toLowerCase().replace('./', '')))?.path;
+
+  const lastPart = path.split('/').pop();
+  if (!res && tree.find(x => x.type === 'tree' && x.path.toLowerCase().startsWith('node_modules/' + lastPart))) {
+    const depRoot = `node_modules/${lastPart}`;
+    const packagePath = depRoot + '/package.json';
+
+    const package = JSON.parse(await getCode(transformRoot, './' + packagePath));
+
+    if (package.main.startsWith('/')) package.main = package.main.slice(1);
+    if (package.main.startsWith('./')) package.main = package.main.slice(2);
+
+    res = tree.find((x) => x.type === 'blob' && x.path.toLowerCase().startsWith(depRoot.toLowerCase() + '/' + package.main.toLowerCase()))?.path;
+  }
 
   if (!builtins[path] && (path.startsWith('powercord/') || path.startsWith('@'))) {
     console.warn('Missing builtin', path);
@@ -7231,7 +7242,7 @@ class Plugin extends React.PureComponent {
             const plugin = plugins[entityID];
             const getUrl = file => plugin.__root + '/' + file;
 
-            const files = fetchCache.keys().filter(x => x.includes(entityID.replace('/blob', '').replace('/tree', '').replace('github.com', 'raw.githubusercontent.com'))).reduce((acc, x) => { acc[x.replace(plugin.__root + '/', '')] = fetchCache.get(x); return acc; }, {});
+            const files = fetchCache.keys().filter(x => !x.includes('api.github.com') && x.includes(entityID.replace('/blob', '').replace('/tree', '').replace('github.com', 'raw.githubusercontent.com'))).reduce((acc, x) => { acc[x.replace(plugin.__root + '/', '')] = fetchCache.get(x); return acc; }, {});
 
             openSub(manifest.name, 'editor', React.createElement(await Editor.Component, {
               files,
@@ -8097,8 +8108,7 @@ Enter any link/GH repo to install a plugin/theme\`);
         case 'uninstall':
           if (info === 'all') {
             echo(\`Uninstalling all...\`, false);
-            topaz.uninstallAll();
-            echo('Uninstalled all');
+            topaz.uninstallAll().then(() => echo('Uninstalled all'));
             break;
           }
 
@@ -8108,8 +8118,7 @@ Enter any link/GH repo to install a plugin/theme\`);
           }
 
           echo(\`Uninstalling <b>\${info}</b>...\`, false);
-          topaz.uninstall(info);
-          echo(\`Uninstalled <b>\${info}</b>\`);
+          topaz.uninstall(info).then(() => echo(\`Uninstalled <b>\${info}</b>\`));
           break;
 
         case 'reinstall':
@@ -8119,8 +8128,7 @@ Enter any link/GH repo to install a plugin/theme\`);
           }
 
           echo(\`Reinstalling <b>\${info}</b>...\`, false);
-          topaz.reload(info);
-          echo(\`Reinstalled <b>\${info}</b>\`);
+          topaz.reload(info).then(() => echo(\`Reinstalled <b>\${info}</b>\`));
           break;
 
         case 'enable':
@@ -8161,7 +8169,17 @@ Enter any link/GH repo to install a plugin/theme\`);
         case 'cache':
           switch (info) {
             case 'status':
-              echo(\`<b><u>Fetch</u></b>\\nEntries: <b>\${topaz.internal.fetchCache.keys().length}</b>\\n\\n<b><u>Final</u></b>\\nEntries: <b>\${topaz.internal.finalCache.keys().length}</b>\`);
+              const cacheStatus = (cache) => spacedColumns([
+                [ 'Entries', cache.keys().length ],
+                [ 'Size', (new Blob([ Object.values(cache.store).join('') ]).size / 1024).toFixed(2) + 'KB']
+              ]);
+
+              echo(\`<b><u>Fetch</u></b>
+\${cacheStatus(topaz.internal.fetchCache)}
+
+
+<b><u>Final</u></b>
+\${cacheStatus(topaz.internal.finalCache)}\`);
               break;
 
             case 'purge':
@@ -8201,8 +8219,7 @@ Enter any link/GH repo to install a plugin/theme\`);
         default:
           if (cmd.includes('/')) { // install
             echo(\`Installing <b>\${cmd}</b>...\`, false);
-            topaz.install(cmd);
-            echo(\`Installed <b>\${cmd}</b>\`);
+            topaz.install(cmd).then(() => echo(\`Installed <b>\${cmd}</b>\`));
           } else { // unknown
             echo(\`Unknown command <b>\${cmd}</b>, use <b>help</b> to view available commands\`);
           }
