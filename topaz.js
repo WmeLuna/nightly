@@ -2237,6 +2237,10 @@ const builtins = {
     console.error(this.entityID, ...args);
   }
 
+  warn(...args) {
+    console.warn(this.entityID, ...args);
+  }
+
   log(...args) {
     console.log(this.entityID, ...args);
   }
@@ -2367,14 +2371,16 @@ module.exports = {
     const useLayoutEffect = current.useLayoutEffect;
     const useRef = current.useRef;
     const useCallback = current.useCallback;
+    const useContext = current.useContext;
 
     current.useMemo = method => method();
     current.useState = val => [ val, () => null ];
     current.useReducer = val => [ val, () => null ];
-    current.useEffect = () => null;
-    current.useLayoutEffect = () => null;
-    current.useRef = () => ({});
+    current.useEffect = () => {};
+    current.useLayoutEffect = () => {};
+    current.useRef = () => ({ current: null });
     current.useCallback = cb => cb;
+    current.useContext = ctx => ctx._currentValue;
 
     const res = method(...args);
 
@@ -2385,6 +2391,7 @@ module.exports = {
     current.useLayoutEffect = useLayoutEffect;
     current.useRef = useRef;
     current.useCallback = useCallback;
+    current.useContext = useContext;
 
     return res;
   },
@@ -8168,11 +8175,32 @@ Enter any link/GH repo to install a plugin/theme\`);
 
         case 'cache':
           switch (info) {
-            case 'status':
-              const cacheStatus = (cache) => spacedColumns([
-                [ 'Entries', cache.keys().length ],
-                [ 'Size', (new Blob([ Object.values(cache.store).join('') ]).size / 1024).toFixed(2) + 'KB']
-              ]);
+            default:
+              const getKb = x => (new Blob([ x.join?.('') ?? x ]).size / 1024);
+              const displaySize = kb => {
+                let unit = 'KB';
+                if (kb > 1000) {
+                  kb /= 1024;
+                  unit = 'MB';
+                }
+
+                return kb.toFixed(2) + unit;
+              };
+
+              const cacheStatus = (cache) => {
+                const totalSize = getKb(Object.values(cache.store));
+
+                const goneThrough = [];
+                return spacedColumns([
+                  [ 'Total Entries', cache.keys().length ],
+                  [ 'Total Size', displaySize(totalSize)],
+                  [],
+                  ...Object.values(topaz.internal.plugins).map(x => {
+                    const [ entries, size ] = cache.keys().filter(y => y.includes(x.__entityID.replace('/blob', '').replace('/tree', '').replace('github.com', 'raw.githubusercontent.com'))).reduce((acc, x) => { goneThrough.push(x); acc[0]++; acc[1] += getKb(cache.get(x)); return acc; }, [0, 0]);
+                    return [ x.manifest.name, \`\${entries} entr\${entries === 1 ? 'y' : 'ies'}, \${displaySize(size)} (\${(size / totalSize * 100).toFixed(1)}%)\` ];
+                  }).concat(goneThrough.length !== cache.keys().length ? [ [ 'Internal', cache.keys().filter(x => !goneThrough.includes(x)).reduce((acc, x) => { acc[0]++; acc[1] += getKb(cache.get(x)); return acc; }, [0, 0]).reduce((acc, x, i) => acc += !i ? \`\${x} entries, \` : \`\${displaySize(x)} (\${(x / totalSize * 100).toFixed(1)}%)\`, '') ] ] : []),
+                ]);
+              };
 
               echo(\`<b><u>Fetch</u></b>
 \${cacheStatus(topaz.internal.fetchCache)}
