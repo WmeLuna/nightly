@@ -165,6 +165,9 @@ __BetterDiscord__
 - Fixed HTML settings not working
 - Global: Mock settings functions
 
+__Terminal__
+- **Added Topaz Terminal.** You can open the Topaz Terminal with Alt+T which allows a more direct/alternate interface with Topaz internals.
+
 __Powercord__
 - Rewrote settings store to use individual store
 - Toasts: Use more options given
@@ -194,7 +197,7 @@ let categoryAssign = {
 let changelog = {
   image: '',
   version: topaz.version[0].toUpperCase() + topaz.version.slice(1),
-  date: '2022-07-23',
+  date: '2022-08-08',
 
   body: bodySplit.reduce((acc, x, i) => {
     if (x[0] === '_') {
