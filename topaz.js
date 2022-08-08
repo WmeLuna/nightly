@@ -25,6 +25,8 @@ const log = (_region, ...args) => {
   );
 };
 
+if (console.context) window.console = console.context(); // Resets console to normal, removing custom methods patched by various things (Sentry, React DevTools) as it's annoying for stack traces
+
 if (window.topaz && topaz.purge) { // live reload handling
   topaz.__reloading = true;
   topaz.purge(); // fully remove topaz (plugins, css, etc)
@@ -790,7 +792,7 @@ const Onyx = eval(`const unsentrify = (obj) => Object.keys(obj).reduce((acc, x) 
   acc[x] = sub.__sentry_original__ ?? sub;
   return acc;
 }, {});
-const makeSourceURL = (name) => \`\${name} | Topaz\`.replace(/ /g, '%20');
+const makeSourceURL = (name) => topaz.debug ? ('Onyx' + Math.random().toString().slice(2)) : \`\${name} | Topaz\`.replace(/ /g, '%20');
 const prettifyString = (str) => str.replaceAll('_', ' ').split(' ').map(x => x[0].toUpperCase() + x.slice(1)).join(' ');
 
 // discord's toast for simplicity
@@ -1006,7 +1008,7 @@ const permissionsModal = async (manifest, neededPerms) => {
 };
 
 const iframeGlobals = [ 'performance', ];
-const passGlobals = [ 'topaz', 'goosemod', 'fetch', 'document', '_', 'TextEncoder', 'TextDecoder', 'addEventListener', 'removeEventListener', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'Node', 'Element', 'MutationEvent', 'MutationRecord', 'addEventListener', 'removeEventListener', 'URL', 'setImmediate', 'NodeList', 'getComputedStyle', 'XMLHttpRequest', 'ArrayBuffer', 'Response', 'IntersectionObserver', 'WebAssembly' ];
+const passGlobals = [ 'topaz', 'goosemod', 'fetch', 'document', '_', 'TextEncoder', 'TextDecoder', 'addEventListener', 'removeEventListener', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'Node', 'Element', 'MutationEvent', 'MutationRecord', 'IntersectionObserverEntry', 'addEventListener', 'removeEventListener', 'URL', 'setImmediate', 'NodeList', 'getComputedStyle', 'XMLHttpRequest', 'ArrayBuffer', 'Response' ];
 
 // did you know: using innerHTML is ~2.5x faster than appendChild for some reason (~40ms -> ~15ms), so we setup a parent just for making our iframes via this trick
 const containerParent = document.createElement('div');
@@ -1055,17 +1057,20 @@ const Onyx = function (entityID, manifest, transformRoot) {
     context[k] = typeof orig === 'function' && k !== '_' && k !== 'NodeList' ? orig.bind(window) : orig; // bind to fix illegal invocation (also lodash breaks bind)
   }
 
-  context.MutationObserver = function(callback) { // janky wrapper because Chromium breaks with disconnected iframe
-    const obs = new window.MutationObserver((mutations) => {
-      callback(mutations);
-    });
+  const observers = [ 'MutationObserver', 'IntersectionObserver' ];
+  for (const k of observers) { // janky wrappers because Chromium breaks with disconnected iframe
+    context[k] = function(callback) {
+      const obs = new window[k]((mutations) => {
+        callback(mutations);
+      });
 
-    this.observe = obs.observe.bind(obs);
-    this.disconnect = obs.disconnect.bind(obs);
-    this.takeRecords = obs.takeRecords.bind(obs);
+      this.observe = obs.observe.bind(obs);
+      this.disconnect = obs.disconnect.bind(obs);
+      this.takeRecords = obs.takeRecords.bind(obs);
 
-    return this;
-  };
+      return this;
+    };
+  }
 
   context.DiscordNative = { // basic polyfill
     crashReporter: {
@@ -1275,6 +1280,8 @@ const encode = (x) => { // base64 vlq
 };
 
 const makeMap = (output, root, name) => {
+  if (topaz.debug) return '';
+
   const startTime = performance.now();
 
   const sources = [];
@@ -3409,6 +3416,72 @@ BdApi = window.BdApi = {
     });
   },
 
+  get 'betterdiscord/libs/bdfdb'() {
+    return new Promise(async res => {
+      const out = (await fetchCache.fetch('https://raw.githubusercontent.com/mwittrien/BetterDiscordAddons/master/Library/0BDFDB.plugin.js'))
+        .replace('BDFDB.PluginUtils.hasUpdateCheck = function (url) {', 'BDFDB.PluginUtils.hasUpdateCheck = function (url) { return false;') // disable updates
+        .replace('BDFDB.PluginUtils.checkUpdate = function (pluginName, url) {', 'BDFDB.PluginUtils.checkUpdate = function (pluginName, url) { return Promise.resolve(0);')
+        .replace('BDFDB.PluginUtils.showUpdateNotice = function (pluginName, url) {', 'BDFDB.PluginUtils.showUpdateNotice = function (pluginName, url) { return;')
+        .replace('let all = typeof config.all != "boolean" ? false : config.all;', `let all = typeof config.all != "boolean" ? false : config.all;
+let out = goosemod.webpackModules[all ? 'findAll' : 'find'](m => filter(m) || (m.type && filter(m.type)));
+if (out) out = filter(out) ?? out;
+return out;`) // use our own webpack
+        .replace('Internal.getWebModuleReq = function () {', 'Internal.getWebModuleReq = function () { return Internal.getWebModuleReq.req = () => {};')
+        .replace('this && this !== window', 'this && !this.performance')
+        .replace('const chunkName = "webpackChunkdiscord_app";', `
+const moduleHandler = (exports) => {
+  const removedTypes = [];
+  for (const type in PluginStores.chunkObserver) {
+    const foundModule = PluginStores.chunkObserver[type].filter(exports) || exports.default && PluginStores.chunkObserver[type].filter(exports.default);
+    if (foundModule) {
+      Internal.patchComponent(PluginStores.chunkObserver[type].query, PluginStores.chunkObserver[type].config.exported ? foundModule : exports, PluginStores.chunkObserver[type].config);
+      removedTypes.push(type);
+      break;
+    }
+  }
+  while (removedTypes.length) delete PluginStores.chunkObserver[removedTypes.pop()];
+  let found = false, funcString = exports && exports.default && typeof exports.default == "function" && exports.default.toString();
+  if (funcString && funcString.indexOf(".page") > -1 && funcString.indexOf(".section") > -1 && funcString.indexOf(".objectType") > -1) {
+    const returnValue = exports.default({});
+    if (returnValue && returnValue.props && returnValue.props.object == BDFDB.DiscordConstants.AnalyticsObjects.CONTEXT_MENU) {
+      for (const type in PluginStores.contextChunkObserver) {
+        if (PluginStores.contextChunkObserver[type].filter(returnValue.props.children)) {
+          exports.__BDFDB_ContextMenuWrapper_Patch_Name = exports.__BDFDB_ContextMenu_Patch_Name;
+          found = true;
+          if (PluginStores.contextChunkObserver[type].modules.indexOf(exports) == -1) PluginStores.contextChunkObserver[type].modules.push(exports);
+          for (const plugin of PluginStores.contextChunkObserver[type].query) Internal.patchContextMenu(plugin, type, exports);
+          break;
+        }
+      }
+    }
+  }
+  if (!found) for (const type in PluginStores.contextChunkObserver) {
+    if (PluginStores.contextChunkObserver[type].filter(exports)) {
+      if (PluginStores.contextChunkObserver[type].modules.indexOf(exports) == -1) PluginStores.contextChunkObserver[type].modules.push(exports);
+      for (const plugin of PluginStores.contextChunkObserver[type].query) Internal.patchContextMenu(plugin, type, exports);
+      break;
+    }
+  }
+};
+
+const int = setInterval(() => {
+  // for (const m of goosemod.webpackModules.all()) { if (m) moduleHandler(m); }
+}, 5000);
+
+for (const m of goosemod.webpackModules.all()) { if (m) moduleHandler(m); }
+
+Internal.removeChunkObserver = () => clearInterval(int);
+return;`)
+        .replace(/\}\)\(\);\n$/, `})();
+(new module.exports()).load();`); // make and load it
+
+      delete builtins['betterdiscord/libs/bdfdb']; // overwrite getter with output
+      builtins['betterdiscord/libs/bdfdb'] = out;
+
+      res(out);
+    });
+  },
+
   'drdiscord/global': `let DrApi;
 
 (() => {
@@ -4623,24 +4696,88 @@ module.exports = {
 
   isAbsolute: p => p.startsWith('/') || !!p.match(/^[A-Z]:\\\\/)
 };`,
-  'fs': `module.exports = {
-  readdirSync: path => [],
+  'fs': `const strToBuf = str => {
+  const buf = new ArrayBuffer(str.length);
+  const bufView = new Uint8Array(buf);
+
+  for (let i = 0; i < str.length; i++) {
+    bufView[i] = str.charCodeAt(i);
+  }
+
+  return buf;
+};
+
+const syncRequest = (url, useBuffer) => {
+  let resp = topaz.internal.fetchCache.get(url);
+
+  if (!resp) {
+    const request = new XMLHttpRequest();
+    request.open('GET', url, false);
+    if (useBuffer) request.overrideMimeType('text\\/plain; charset=x-user-defined');
+    request.send(null);
+
+    if (request.status !== 200) return;
+
+    resp = request.responseText;
+    topaz.internal.fetchCache.set(url, resp);
+  }
+
+  return resp;
+};
+
+module.exports = {
+  readdirSync: path => {
+    const isRepo = __entityID.split('/').length === 2;
+
+    topaz.log('fs.readdirSync', path);
+
+    if (isRepo) {
+      const url = \`https://api.github.com/repos/\${__entityID}/contents/\${path}\`;
+
+      const resp = syncRequest(url, false);
+
+      if (!resp) return [];
+
+      return JSON.parse(resp).map(x => x.name);
+    }
+
+    return [];
+  },
   writeFile: (path, data, cb) => {},
 
   readFileSync: (path, encoding) => {
     const isRepo = __entityID.split('/').length === 2;
 
+    topaz.log('fs.readFileSync', path, encoding);
+
     if (isRepo) {
       const url = \`https://raw.githubusercontent.com/\${__entityID}/HEAD/\${path}\`;
-      console.log('fs read', url);
+      const useBuffer = encoding == null;
 
-      /* const request = new XMLHttpRequest();
-      request.open('GET', url, false);
-      request.send(null);
+      const resp = syncRequest(url, useBuffer);
 
-      if (request.status === 200) {
-        console.log(request.responseText);
-      } */
+      if (useBuffer) {
+        const buffer = strToBuf(resp);
+
+        buffer.toString = function() { return new TextDecoder().decode(this); };
+        buffer.buffer = buffer;
+
+        return buffer;
+      } else return resp;
+    }
+  },
+
+  promises: {
+    readFile: async (path, encoding) => {
+      topaz.log('fs.promises.readFile', path, encoding);
+
+      const isRepo = __entityID.split('/').length === 2;
+
+      if (isRepo) {
+        const url = \`https://raw.githubusercontent.com/\${__entityID}/HEAD/\${path}\`;
+
+        return await (await fetch(url)).text();
+      }
     }
   }
 };`,
@@ -4980,19 +5117,28 @@ const makeChunk = async (root, p) => {
     };`;
   }
 
+  code = await replaceAsync(code, /require\.resolve\(['"`](.*?)['"`]\)/g, async (_, toRes) => '`' + await resolveFileFromTree(toRes) + '`');
+
   const chunk = `// ${finalPath}
 let ${id} = {};
 (() => {
 const __dirname = '${getDir(finalPath)}';
+let module = {
+  exports: {}
+};
+let { exports } = module;
+
 // MAP_START|${finalPath}
 ` + code
-      .replace('module.exports =', `${id} =`)
-      .replace('export default', `${id} =`)
-      .replaceAll(/(module\.)?exports\.(.*?)=/g, (_, _mod, key) => `${id}.${key}=`)
-      .replaceAll(/export const (.*?)=/g, (_, key) => `const ${key}= ${id}.${key}=`)
-      .replaceAll(/export function (.*?)\(/g, (_, key) => `const ${key} = ${id}.${key} = function ${key}(`)
-      .replaceAll(/export class ([^ ]*)/g, (_, key) => `const ${key} = ${id}.${key} = class ${key}`) +
-`\n})(); // MAP_END`;
+      // .replace(/module\.exports ?=/, `${id} =`)
+      .replace('export default', `module.exports =`)
+      // .replaceAll(/(module\.)?exports\.(.*?)/g, (_, _mod, key) => `${id}.${key}`)
+      .replaceAll(/export const (.*?)=/g, (_, key) => `const ${key} = exports.${key}=`)
+      .replaceAll(/export function (.*?)\(/g, (_, key) => `const ${key} = exports.${key} = function ${key}(`)
+      .replaceAll(/export class ([^ ]*)/g, (_, key) => `const ${key} = exports.${key} = class ${key}`) +
+`\n// MAP_END
+${id} = module.exports;
+})();`;
 
   if (shouldUpdateFetch) {
     fetchProgressCurrent++;
@@ -5618,9 +5764,6 @@ const install = async (info, settings = undefined, disabled = false) => {
         break;
 
       case 'un':
-        if (settings) plugin.settings.store = settings;
-        plugin.settings.onChange = () => savePlugins(); // Re-save plugin settings on change
-
         if (plugin.getSettingsPanel) plugin.__settings = {
           render: plugin.getSettingsPanel(),
           props: {
@@ -5790,7 +5933,9 @@ const transform = async (path, code, mod) => {
 
   let indexCode = await includeRequires(path, code);
 
-  const subGlobal = ((code.includes('ZeresPluginLibrary') || code.includes('ZLibrary')) ? await mapifyBuiltin('betterdiscord/libs/zeres') : ''); // do above so added to chunks
+  // do above so added to chunks
+  const subGlobal = ((code.includes('ZeresPluginLibrary') || code.includes('ZLibrary')) ? await mapifyBuiltin('betterdiscord/libs/zeres') : '')
+    + (code.includes('BDFDB_Global') ? await mapifyBuiltin('betterdiscord/libs/bdfdb') : '');
 
   let out = await mapifyBuiltin(fullMod(mod) + '/global') +
   Object.values(chunks).join('\n\n') + '\n\n' +
@@ -7663,21 +7808,6 @@ class Settings extends React.PureComponent {
         }
 
         ReactDOM.render(React.createElement(FilterPopout), popout);
-
-        const checkClick = e => {
-          el.focus();
-          if (e.path.some(x => x.id === 'topaz-repo-filtering')) return;
-
-          removeFilterPopout();
-          if (!e.path.some(x => x.id === 'topaz-repo-autocomplete')) {
-            autocomplete.style.display = 'none';
-            el.blur();
-          }
-
-          document.removeEventListener('click', checkClick);
-        };
-
-        setTimeout(() => document.addEventListener('click', checkClick), 100);
       };
 
       const removeFilterPopout = () => {
@@ -7712,7 +7842,8 @@ class Settings extends React.PureComponent {
 
 
       if (!el.placeholder) {
-        el.placeholder = 'GitHub repo / URL';
+        const placeholder = 'GitHub repo / URL';
+        el.placeholder = placeholder;
 
         el.onkeydown = async (e) => {
           if (e.keyCode !== 13) return;
@@ -7724,16 +7855,17 @@ class Settings extends React.PureComponent {
           install(info);
         };
 
-        el.onfocus = () => textInputHandler(el.value ?? '');
+        el.onfocus = () => {
+          textInputHandler(el.value ?? '');
 
-        el.onblur = (e) => {
-          const checkIfInFilterPopout = el => el && (el.id === 'topaz-repo-filtering' || checkIfInFilterPopout(el.parentElement));
-          if (e.relatedTarget?.ariaLabel === 'Filter' || checkIfInFilterPopout(e.relatedTarget)) return; // Filter button clicked, ignore
+          document.onclick = e => {
+            if (e.target.placeholder !== placeholder && !e.path.some(x => x.id === 'topaz-repo-autocomplete') && !e.path.some(x => x.id === 'topaz-repo-filtering')) setTimeout(() => {
+              removeFilterPopout();
+              document.querySelector('#topaz-repo-autocomplete').style.display = 'none';
 
-          setTimeout(() => {
-            removeFilterPopout();
-            autocomplete.style.display = 'none';
-          }, 100);
+              document.onclick = null;
+            }, 10);
+          };
         };
       }
 
@@ -8238,6 +8370,8 @@ Enter any link/GH repo to install a plugin/theme\`);
           break;
 
         case 'debug':
+          topaz.debug = !topaz.debug;
+          echo(\`Debug <b>\${topaz.debug ? 'ON' : 'OFF'}</b> for this session\`);
           break;
 
         case 'help':
