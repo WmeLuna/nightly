@@ -79,6 +79,7 @@ jobs:
       - name: Build Cumcord
         run: |
           git clone https://git.sr.ht/~creatable/Cumcord && cd Cumcord
+          sed -i 's/let isEnabled = false;/let isEnabled = true;/' src/api/devmode.js
           pnpm install
           node build.mjs
           mv dist/new-build.js ../cumcord.js
