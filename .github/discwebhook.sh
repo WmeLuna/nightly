@@ -41,7 +41,7 @@ WEBHOOK_DATA="{
         \"description\": \"$CommitMsg\",
         \"fields\": [ {
             \"name\": \"$FileCount changed files\",
-            \"value\": \"$Files\"
+            \"value\": \"$Files\n \"
         } ],
         \"footer\": {\"text\":\"⭐ $RepoStars\"}
     } ] 
