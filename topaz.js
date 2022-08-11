@@ -5903,6 +5903,9 @@ const install = async (info, settings = undefined, disabled = false) => {
 
         break;
     }
+
+    if (!manifest.name && PluginClass.name) manifest.name = PluginClass.name;
+    if (!manifest.author && isGitHub) manifest.author = repo.split('/')[0];
   }
 
   plugins[info] = plugin;
@@ -6109,7 +6112,13 @@ window.topaz = {
     if (!plugins[info]) return log('enable', 'plugin not installed');
     log('enable', info);
 
-    plugins[info]._topaz_start();
+    try { // wrap in try incase plugin failed to install so then fails to uninstall as it never inited properly
+      plugins[info]._topaz_start();
+    } catch (e) {
+      console.error('START', e);
+      // notify user?
+    }
+
     plugins[info].__enabled = true;
 
     setDisabled(info, false);
@@ -6118,13 +6127,25 @@ window.topaz = {
     if (!plugins[info]) return log('disable', 'plugin not installed');
     log('disable', info);
 
-    plugins[info]._topaz_stop();
+    try { // wrap in try incase plugin failed to install so then fails to uninstall as it never inited properly
+      plugins[info]._topaz_stop();
+    } catch (e) {
+      console.error('STOP', e);
+      // notify user?
+    }
+
     plugins[info].__enabled = false;
 
     setDisabled(info, true);
   },
   reload: (info) => {
-    plugins[info]._topaz_stop();
+    try { // wrap in try incase plugin failed to install so then fails to uninstall as it never inited properly
+      plugins[info]._topaz_stop();
+    } catch (e) {
+      console.error('STOP', e);
+      // notify user?
+    }
+
     delete plugins[info];
 
     setTimeout(() => topaz.install(info), 200);
