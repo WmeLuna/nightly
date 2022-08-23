@@ -35,7 +35,7 @@ if (window.topaz && topaz.purge) { // live reload handling
 }
 
 window.topaz = {
-  version: 'alpha 11.0',
+  version: 'alpha 11.2',
   log
 };
 
@@ -2383,6 +2383,7 @@ const builtins = {
 module.exports = {
   Plugin
 };`,
+  ...['Plugin'].reduce((acc, x) => { acc[`powercord/entities/${x}`] = `module.exports = require('powercord/entities').${x};`; return acc; }, {}),
   'powercord/webpack': `const makeFinalFilter = (filter) => {
   if (Array.isArray(filter)) return (mod) => filter.every(p => mod.hasOwnProperty(p) || mod.__proto__?.hasOwnProperty?.(p));
   return filter;
@@ -2617,6 +2618,8 @@ const SelectTempWrapper = goosemod.webpackModules.findByDisplayName('SelectTempW
 
 const OriginalRadioGroup = goosemod.webpackModules.findByDisplayName('RadioGroup');
 
+const OriginalTextArea = goosemod.webpackModules.findByDisplayName('TextArea');
+
 const Tooltip = goosemod.webpackModules.findByDisplayName('Tooltip');
 const Button = goosemod.webpackModules.findByProps('DropdownSizes');
 
@@ -2652,6 +2655,26 @@ class FormItem extends React.PureComponent {
 
 module.exports = {
   SwitchItem: OriginalSwitchItem,
+
+  TextAreaInput: class TextAreaInput extends React.PureComponent {
+    render() {
+      const title = this.props.children;
+      delete this.props.children;
+
+      return React.createElement(FormItem, {
+          title,
+          note: this.props.note,
+          required: this.props.required,
+
+          noteHasMargin: true
+        },
+
+        React.createElement(OriginalTextArea, {
+          ...this.props
+        })
+      );
+    }
+  },
 
   TextInput: class TextInput extends React.PureComponent {
     render() {
