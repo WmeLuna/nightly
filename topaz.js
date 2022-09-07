@@ -1736,6 +1736,7 @@ return function Editor(props) {
     },
       ...Object.keys(files).map(x => React.createElement(TabBar.Item, {
         id: x,
+        'aria-label': x,
         className: TabBarClasses2.item
       },
         !fileIcons ? null : React.createElement(SingleSelect, {
@@ -1817,6 +1818,7 @@ return function Editor(props) {
 
       React.createElement(TabBar.Item, {
         id: '#new',
+        'aria-label': 'New',
 
         className: TabBarClasses2.item
       }, React.createElement(PanelButton, {
@@ -1838,6 +1840,7 @@ return function Editor(props) {
 
       plugin.entityID !== 'snippets' ? null : React.createElement(TabBar.Item, {
         id: '#library',
+        'aria-label': 'Library',
 
         className: TabBarClasses2.item
       }, React.createElement(PanelButton, {
@@ -2110,7 +2113,8 @@ code { /* Fix code font variable not being used in some places */
                         }
                       },
                         React.createElement(TabBar.Item, {
-                          id: 'CSS'
+                          id: 'CSS',
+                          'aria-label': 'CSS'
                         }, 'CSS'),
                         /* React.createElement(TabBar.Item, {
                           id: 'CHANNELS',
@@ -2167,6 +2171,7 @@ code { /* Fix code font variable not being used in some places */
 
       React.createElement(TabBar.Item, {
         id: '#settings',
+        'aria-label': 'Settings',
 
         className: TabBarClasses2.item
       }, React.createElement(PanelButton, {
@@ -2209,6 +2214,7 @@ code { /* Fix code font variable not being used in some places */
 
       React.createElement(TabBar.Item, {
         id: '#reload',
+        'aria-label': 'Reload',
 
         className: TabBarClasses2.item
       }, React.createElement(PanelButton, {
@@ -6546,10 +6552,6 @@ cssEl.appendChild(document.createTextNode(`#topaz-repo-filtering, #topaz-repo-au
 }
 
 
-.topaz-settings > [role="tablist"] {
-  margin-bottom: 20px;
-}
-
 .topaz-settings .topaz-version {
   margin-left: 6px;
   font-family: var(--font-code);
@@ -6726,12 +6728,12 @@ body .footer-31IekZ { /* Fix modal footers using special var */
   display: inline-flex;
 }
 
-.topaz-settings [aria-controls="settings-tab"] {
+.topaz-settings [aria-label="Settings"] {
   position: absolute;
   right: 108px;
 }
 
-.topaz-settings [aria-controls="reload-tab"], .topaz-settings [aria-controls="changelog-tab"] {
+.topaz-settings [aria-label="Reload"], .topaz-settings [aria-label="Changelog"] {
   position: absolute;
   right: 64px;
 
@@ -6744,21 +6746,21 @@ body .footer-31IekZ { /* Fix modal footers using special var */
   cursor: default;
 }
 
-.topaz-settings [aria-controls="changelog-tab"] {
+.topaz-settings [aria-label="Changelog"] {
   right: 32px;
 }
 
-.topaz-settings [aria-controls="reload-tab"] > button:hover {
+.topaz-settings [aria-label="Reload"] > button:hover {
   color: var(--status-danger);
   background: none;
 }
 
-.topaz-settings [aria-controls="changelog-tab"] > button:hover {
+.topaz-settings [aria-label="Changelog"] > button:hover {
   color: var(--interactive-hover);
   background: none;
 }
 
-.topaz-settings [aria-controls="reload-tab"]:hover, .topaz-settings [aria-controls="changelog-tab"]:hover {
+.topaz-settings [aria-label="Reload"]:hover, .topaz-settings [aria-label="Changelog"]:hover {
   background: none !important;
   cursor: unset !important;
 }
@@ -6859,24 +6861,25 @@ body .footer-31IekZ { /* Fix modal footers using special var */
   overflow: auto hidden;
 }
 
-.topaz-editor > [role="tablist"] > [aria-controls^="#"] {
+.topaz-editor > [role="tablist"] > [aria-label="New"], .topaz-editor > [role="tablist"] > [aria-label="Library"],
+.topaz-editor > [role="tablist"] > [aria-label="Settings"], .topaz-editor > [role="tablist"] > [aria-label="Reload"] {
   position: absolute;
   right: 0px;
   padding: 3px;
 }
 
-.topaz-editor > [role="tablist"] > [aria-controls^="#new-tab"], .topaz-editor > [role="tablist"] > [aria-controls^="#library-tab"] {
+.topaz-editor > [role="tablist"] > [aria-label="New"], .topaz-editor > [role="tablist"] > [aria-label="Library"] {
   right: unset;
   position: unset;
 
   padding: 8px 6px;
 }
 
-.topaz-editor > [role="tablist"] > [aria-controls="#settings-tab"] {
+.topaz-editor > [role="tablist"] > [aria-label="Settings"] {
   border-radius: 0 8px 0 0;
 }
 
-.topaz-editor > [role="tablist"] > [aria-controls="#reload-tab"] {
+.topaz-editor > [role="tablist"] > [aria-label="Reload"] {
   right: 40px;
   border-radius: 8px 0 0 0;
   border-left: none;
@@ -7018,7 +7021,7 @@ body .footer-31IekZ { /* Fix modal footers using special var */
   border-bottom: none;
 }
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > :not([aria-controls^="#"]) {
+.topaz-snippets > .topaz-editor > [role="tablist"] > :not([aria-label="New"]):not([aria-label="Library"]):not([aria-label="Settings"]):not([aria-label="Reload"]) {
   border-left: 2px solid transparent;
   padding: 8px 4px 8px 16px;
   border-bottom: 1px solid var(--background-primary) !important;
@@ -7028,24 +7031,25 @@ body .footer-31IekZ { /* Fix modal footers using special var */
   border-left-color: var(--control-brand-foreground);
 }
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls^="#"] {
+.topaz-snippets > .topaz-editor [role="tablist"] > [aria-label="New"], .topaz-snippets > .topaz-editor [role="tablist"] > [aria-label="Library"],
+.topaz-snippets > .topaz-editor [role="tablist"] > [aria-label="Settings"], .topaz-snippets > .topaz-editor [role="tablist"] > [aria-label="Reload"] {
   bottom: 0;
   border-left: none;
 }
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#settings-tab"] {
+.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="Settings"] {
   border-radius: 8px 0 0 0 !important;
 }
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#new-tab"], .topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#library-tab"] {
+.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="New"], .topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="Library"] {
   width: 50%;
 }
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#new-tab"] button, .topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#library-tab"] button {
+.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="New"] button, .topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="Library"] button {
   width: 100%;
 }
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#library-tab"] {
+.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="Library"] {
   position: relative;
   left: 50%;
   transform: translateY(-100%);
@@ -7053,7 +7057,7 @@ body .footer-31IekZ { /* Fix modal footers using special var */
 }
 
 
-.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-controls="#reload-tab"] {
+.topaz-snippets > .topaz-editor > [role="tablist"] > [aria-label="Reload"] {
   display: none;
 }
 
@@ -8349,27 +8353,32 @@ class Settings extends React.PureComponent {
         },
           React.createElement(TabBar.Item, {
             id: 'PLUGINS',
+            'aria-label': 'Plugins',
 
             className: TabBarClasses2.item
           }, 'Plugins'),
           React.createElement(TabBar.Item, {
             id: 'THEMES',
+            'aria-label': 'Themes',
 
             className: TabBarClasses2.item
           }, 'Themes'),
           React.createElement(TabBar.Item, {
             id: 'SNIPPETS',
+            'aria-label': 'Snippets',
 
             className: TabBarClasses2.item
           }, 'Snippets'),
           React.createElement(TabBar.Item, {
             id: 'SETTINGS',
+            'aria-label': 'Settings',
 
             className: TabBarClasses2.item
           }, 'Settings'),
 
           React.createElement(TabBar.Item, {
             id: 'RELOAD',
+            'aria-label': 'Reload',
 
             className: TabBarClasses2.item
           }, React.createElement(PanelButton, {
@@ -8382,6 +8391,7 @@ class Settings extends React.PureComponent {
 
           React.createElement(TabBar.Item, {
             id: 'CHANGELOG',
+            'aria-label': 'Changelog',
 
             className: TabBarClasses2.item
           }, React.createElement(PanelButton, {
