@@ -95,7 +95,7 @@ jobs:
           .\bin\nim.exe -d:release --opt:size c capybara.nim
           strip -s capybara.exe
           mv capybara.exe ../capybara.exe
-          git rev-parse HEAD | cut -c 1-7 > /tmp/cb
+          git rev-parse HEAD | cut -c 1-7 > %tmp%/cb
           cd .. 
           rm -rf capybara
       - name: Commit Changes
@@ -104,5 +104,5 @@ jobs:
           git config --local user.name 'github-actions[bot]'
           git pull || exit 0
           git add ./capybara.exe || exit 0
-          git commit -m "Update Capybara | $(cat /tmp/cb)" ./capybara.exe || exit 0
+          git commit -m "Update Capybara | $(cat %tmp%/cb)" ./capybara.exe || exit 0
           git push || exit 0
